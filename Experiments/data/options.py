@@ -17,7 +17,7 @@ OPTION_COLS = {
 }
 GREEK_COLS = ['delta', 'gamma', 'theta', 'vega', 'rho']
 FINAL_COLS = [
-    'expiryDate', 'days_to_expiry', 'strikePrice', 'impliedVolatility',
+    'expiryDate', 'days_to_expiry', 'currentPrice', 'strikePrice', 'impliedVolatility',
     *GREEK_COLS,
     'lastPrice', 'openInterest', 'totalTradedVolume',
 ]
@@ -108,7 +108,7 @@ class OptionsChain:
             )
 
         expiry_dt = chosen_dt.replace(hour=15, minute=30)
-        spot = self._spot_from_chain(rows)
+        spot = self._current_price(rows)
         return rows, spot, expiry_dt
 
     @staticmethod
@@ -117,6 +117,13 @@ class OptionsChain:
             series.astype(str).str.replace(',', '', regex=False).replace('-', np.nan),
             errors='coerce',
         )
+
+    def _current_price(self, rows):
+        try:
+            records = NSELive().index_option_chain(self.derivative)['records']
+            return float(records['underlyingValue'])
+        except (KeyError, TypeError, ValueError):
+            return self._spot_from_chain(rows)
 
     def _spot_from_chain(self, df):
         spot_cols = [
@@ -165,6 +172,7 @@ class OptionsChain:
         df = df[df['totalTradedVolume'] > min_traded_qty].reset_index(drop=True)
         df['expiryDate'] = expiry_dt.normalize()
         df['days_to_expiry'] = days
+        df['currentPrice'] = spot
 
         if df.empty:
             raise ValueError(
